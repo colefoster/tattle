@@ -19,7 +19,7 @@ It was prompted by [a post from @This_Liss](https://x.com/This_Liss/status/21131
 uv tool install git+https://github.com/colefoster/tattle
 ```
 
-Requires Python 3.12+. `pipx install git+https://github.com/colefoster/tattle` also works.
+Requires Python 3.12+. `pipx install git+https://github.com/colefoster/tattle` also works. The PyPI package will be **`tattle-audit`**. **Don't `pip install tattle`:** that name on PyPI belongs to an unrelated project.
 
 ## Retro: what already left
 
