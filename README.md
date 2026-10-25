@@ -16,10 +16,10 @@ It was prompted by [a post from @This_Liss](https://x.com/This_Liss/status/21131
 ## Install
 
 ```sh
-uv tool install git+https://github.com/colefoster/tattle
+uv tool install tattle-audit
 ```
 
-Requires Python 3.12+. `pipx install git+https://github.com/colefoster/tattle` also works. The PyPI package will be **`tattle-audit`**. **Don't `pip install tattle`:** that name on PyPI belongs to an unrelated project.
+Requires Python 3.12+. `pipx install tattle-audit` also works. The command is `tattle`. **Don't `pip install tattle`:** that name on PyPI belongs to an unrelated project.
 
 ## Retro: what already left
 
