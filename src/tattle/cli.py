@@ -126,8 +126,9 @@ class Proxy:
             (self.session / "identity.json").unlink()  # the only file holding raw identity strings
         except FileNotFoundError:
             pass
-        out = report.write_report(self.jsonl, self.session / "report.html",
-                                  {"command": scrub(command, self.ident), "session": self.session.name})
+        meta = {"command": scrub(command, self.ident), "session": self.session.name}
+        (self.session / "meta.json").write_text(json.dumps(meta))
+        out = report.write_report(self.jsonl, self.session / "report.html", meta)
         print(report.terminal_summary(report.load(self.jsonl), out, color), file=sys.stderr)
         if open_browser:
             webbrowser.open(out.as_uri())
@@ -205,7 +206,10 @@ def cmd_tail(a: argparse.Namespace) -> int:
 
 def cmd_report(a: argparse.Namespace) -> int:
     s = resolve_session(a.session)
-    out = report.write_report(s / "flows.jsonl", s / "report.html", {"session": s.name})
+    name = "report.share.html" if a.share else "report.html"
+    meta_file = s / "meta.json"
+    meta = json.loads(meta_file.read_text()) if meta_file.exists() else {"session": s.name}
+    out = report.write_report(s / "flows.jsonl", s / name, meta, a.share)
     if a.json:
         print(json.dumps(report.summarize(report.load(s / "flows.jsonl")), indent=2))
     else:
@@ -269,6 +273,7 @@ def main(argv: list[str] | None = None) -> int:
     rp.add_argument("session", nargs="?")
     rp.add_argument("--open", action="store_true")
     rp.add_argument("--json", action="store_true")
+    rp.add_argument("--share", action="store_true", help="extra masking for a report you will show others")
     rp.set_defaults(fn=cmd_report)
 
     sub.add_parser("ls", help="list sessions").set_defaults(fn=cmd_ls)

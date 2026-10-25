@@ -40,3 +40,9 @@ def test_report_escapes_script_close(ident):
     f = make_flow(host="a.example", path=b"/</script><b>")
     page = report.render_html([build_record(f, ident)])
     assert page.count("</script>") == 2  # just our two closing tags
+
+
+def test_share_mode_drops_initials_and_ids(ident):
+    f = make_flow(host="a.example", path=b"/org/6cd9c656-eadf-4d14-be8a-70a498b8e414/x?e=jane.doe%40example-mail.net")
+    page = report.render_html([build_record(f, ident)], share=True)
+    assert "6cd9c656" not in page and "j•••@" not in page and "•••@•••.net" in page

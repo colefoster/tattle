@@ -33,9 +33,10 @@ SECRET_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
 ]
 
 # .env-style assignment of something secret-named. The prefix also accepts a
-# literal "\n" so it still matches .env contents embedded in a JSON string.
+# literal "\n" or "\t" (and the "→" of numbered file listings) so it still
+# matches .env contents embedded in a JSON string.
 ENV_ASSIGN = re.compile(
-    r"(?:^|\\n|[\s;\"'])(?:export\s+)?([A-Z][A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIALS?))"
+    r"(?:^|\\[nt]|→|[\s;\"'])(?:export\s+)?([A-Z][A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIALS?))"
     r"\s*=\s*['\"]?([^\s'\"\\]{8,})",
     re.MULTILINE,
 )
@@ -72,15 +73,19 @@ class Identity:
             pass
         host = socket.gethostname().split(".")[0]
         ident.hostname = host if len(host) >= 4 and host.lower() not in {"localhost"} else ""
-        for key in ("user.email", "user.name"):
-            try:
-                val = subprocess.run(["git", "config", "--get", key], capture_output=True, text=True, timeout=3).stdout.strip()
-            except Exception:
-                val = ""
-            if val and key == "user.email":
-                ident.emails.append(val)
-            elif val and " " in val and not ident.full_name:
-                ident.full_name = val
+        # Global and repo-local: a repo may commit as a noreply address while
+        # the global config still holds the real one.
+        for scope in ("--global", None):
+            for key in ("user.email", "user.name"):
+                args = ["git", "config", *([scope] if scope else []), "--get", key]
+                try:
+                    val = subprocess.run(args, capture_output=True, text=True, timeout=3, cwd=cwd).stdout.strip()
+                except Exception:
+                    val = ""
+                if val and key == "user.email" and val not in ident.emails:
+                    ident.emails.append(val)
+                elif val and key == "user.name" and " " in val and not ident.full_name:
+                    ident.full_name = val
         if watch_file and watch_file.exists():
             ident.extra = [l.strip() for l in watch_file.read_text().splitlines() if l.strip() and not l.startswith("#")]
         if cwd:
@@ -222,11 +227,12 @@ def scrub(text: str, ident: Identity | None = None) -> str:
     return text
 
 
+# First match wins: telemetry before model API so statsig.anthropic.com lands right.
 HOST_CATEGORIES: list[tuple[str, tuple[str, ...]]] = [
-    ("model API", ("api.anthropic.com", "claude.ai", "api.openai.com", "chatgpt.com", "generativelanguage.googleapis.com",
-                   "openrouter.ai", "api.mistral.ai", "api.groq.com", "api.x.ai")),
     ("telemetry", ("statsig.anthropic.com", "statsig.com", "featuregates.org", "datadoghq.com", "sentry.io",
                    "segment.io", "amplitude.com", "mixpanel.com", "posthog.com", "honeycomb.io", "growthbook.io")),
+    ("model API", ("anthropic.com", "claude.ai", "api.openai.com", "chatgpt.com", "generativelanguage.googleapis.com",
+                   "openrouter.ai", "api.mistral.ai", "api.groq.com", "api.x.ai")),
     ("packages & code", ("registry.npmjs.org", "pypi.org", "files.pythonhosted.org", "github.com",
                          "githubusercontent.com", "crates.io", "storage.googleapis.com")),
 ]

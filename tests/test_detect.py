@@ -83,3 +83,9 @@ def test_host_category():
     assert host_category("api.anthropic.com") == "model API"
     assert host_category("o123.ingest.sentry.io") == "telemetry"
     assert host_category("example.com") == "web"
+
+
+def test_dotenv_in_numbered_file_listing(ident):
+    body = '{"text": "     1\\tAPI_TOKEN=abcd1234efgh5678\\n     2→DB_PASSWORD=zzzzyyyyxxxx"}'
+    ks = kinds(scan(body, "body", ident))
+    assert {".env-style API_TOKEN", ".env-style DB_PASSWORD"} <= ks

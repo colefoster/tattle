@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import copy
 import html
 import json
+import re
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
+
+from tattle.detect import host_category
 
 SEV_ORDER = {"high": 0, "medium": 1, "low": 2}
 
@@ -25,11 +29,28 @@ def load(path: Path) -> list[dict]:
     return sorted(recs, key=lambda r: r.get("ts") or 0)
 
 
+UUIDISH = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9_]*[0-9][A-Za-z0-9_]{15,}")
+
+
+def share_safe(recs: list[dict]) -> list[dict]:
+    """Stronger masking for a report you intend to show other people:
+    drop the leading characters the default mask keeps, and blank account and
+    object IDs in paths."""
+    out = copy.deepcopy(recs)
+    for r in out:
+        r["path"] = UUIDISH.sub("{id}", r.get("path", ""))
+        for f in r.get("findings", []):
+            f["sample"] = re.sub(r"[A-Za-z0-9]•••", "•••", f["sample"])
+            f["sample"] = re.sub(r"^.{4}…", "••••…", f["sample"]) if f["category"] == "secret" else f["sample"]
+    return out
+
+
 def summarize(recs: list[dict]) -> dict:
     hosts: dict[str, dict] = {}
     flags: dict[tuple, dict] = {}
     for i, r in enumerate(recs):
-        h = hosts.setdefault(r["host"], {"host": r["host"], "category": r["category"], "requests": 0,
+        # Re-derive so old sessions pick up an improved host table.
+        h = hosts.setdefault(r["host"], {"host": r["host"], "category": host_category(r["host"]), "requests": 0,
                                          "bytes_up": 0, "bytes_down": 0, "high": 0, "medium": 0, "expected": 0})
         h["requests"] += 1
         h["bytes_up"] += r.get("req_bytes") or 0
@@ -105,11 +126,11 @@ CSS = r"""
 *{box-sizing:border-box}html{background:var(--paper)}
 body{margin:0;color:var(--ink);font:14px/1.5 var(--sans);background:var(--paper)}
 .wrap{max-width:1120px;margin:0 auto;padding:40px 24px 80px}
-header{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;border-bottom:2px solid var(--ink);padding-bottom:16px}
+header{display:flex;flex-direction:column;gap:10px;border-bottom:2px solid var(--ink);padding-bottom:16px}
 .brand{font:700 13px var(--mono);letter-spacing:.18em;text-transform:uppercase}
 .brand b{display:inline-block;background:var(--ink);color:var(--paper);padding:2px 8px;margin-right:10px;letter-spacing:.12em}
 h1{font:700 30px/1.15 var(--sans);letter-spacing:-.02em;margin:14px 0 0}
-.meta{font:12px/1.7 var(--mono);color:var(--mute);text-align:right;white-space:nowrap}
+.meta{font:12px/1.7 var(--mono);color:var(--mute);overflow-wrap:anywhere}
 .meta code{color:var(--ink)}
 .stats{display:grid;grid-template-columns:repeat(5,1fr);border-bottom:1px solid var(--rule)}
 .stat{padding:18px 0 16px;border-right:1px solid var(--rule);padding-left:16px}
@@ -149,8 +170,7 @@ td.num,th.num{text-align:right}
 .req tr.err td{color:var(--mute)}
 .tags{color:var(--red);font-size:11.5px}
 footer{margin-top:48px;font:11.5px var(--mono);color:var(--mute);border-top:1px solid var(--rule);padding-top:14px;display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
-@media (max-width:760px){header{flex-direction:column;align-items:flex-start}.meta{text-align:left}
-.stats{grid-template-columns:repeat(2,1fr)}.stat{padding-left:0;border-right:0}
+@media (max-width:760px){.stats{grid-template-columns:repeat(2,1fr)}.stat{padding-left:0;border-right:0}
 .flag{grid-template-columns:70px 1fr;}.flag .route,.flag .sample{grid-column:2}.flag .count{display:none}
 .req td.path{max-width:160px}}
 """
@@ -184,8 +204,10 @@ q.addEventListener('input', render); onlyF.addEventListener('change', render); r
 """
 
 
-def render_html(recs: list[dict], meta: dict | None = None) -> str:
+def render_html(recs: list[dict], meta: dict | None = None, share: bool = False) -> str:
     meta = meta or {}
+    if share:
+        recs = share_safe(recs)
     s = summarize(recs)
     e = html.escape
     started = datetime.fromtimestamp(recs[0]["ts"]).strftime("%Y-%m-%d %H:%M") if recs else "—"
@@ -236,6 +258,6 @@ def render_html(recs: list[dict], meta: dict | None = None) -> str:
 </div><script type="application/json" id="tattle-data">{data_json}</script><script>{JS}</script></body></html>"""
 
 
-def write_report(jsonl: Path, out: Path, meta: dict | None = None) -> Path:
-    out.write_text(render_html(load(jsonl), meta))
+def write_report(jsonl: Path, out: Path, meta: dict | None = None, share: bool = False) -> Path:
+    out.write_text(render_html(load(jsonl), meta, share))
     return out
