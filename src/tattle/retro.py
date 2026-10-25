@@ -578,14 +578,12 @@ def parse_since(value: str | None) -> float | None:
 
 
 def identity_summary(r: Results) -> dict:
-    """Own identity sent to the provider, collapsed: kind -> occurrences, plus session count."""
+    """Own identity sent to the provider, collapsed to kind -> occurrences."""
     kinds: dict[str, int] = {}
-    sessions: set[str] = set()
     for g in r.groups.values():
         if g.channel == "provider" and g.severity == "info":
             kinds[g.kind] = kinds.get(g.kind, 0) + g.count
-            sessions.update(g.sessions)
-    return {"kinds": kinds, "count": sum(kinds.values()), "sessions": len(sessions)}
+    return {"kinds": kinds, "count": sum(kinds.values())}
 
 
 def to_dict(r: Results) -> dict:

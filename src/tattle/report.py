@@ -401,8 +401,8 @@ def identity_text(d: dict) -> str:
     if not idn.get("count"):
         return ""
     kinds = ", ".join(k.replace("your ", "") for k in idn["kinds"])
-    return (f"Your identity ({kinds}) appears {idn['count']:,} times across {idn['sessions']:,}+ sessions sent to the "
-            f"provider, as expected: it is in every system prompt and working directory.")
+    return (f"Your identity ({kinds}) appears {idn['count']:,} times in what was sent to the provider, as expected: "
+            f"it is in every system prompt and working directory.")
 
 
 def identity_line(d: dict) -> str:
