@@ -24,14 +24,15 @@ AUTH_HEADERS = {"authorization", "proxy-authorization", "x-api-key", "cookie", "
 
 SECRET_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("Anthropic API key", re.compile(r"sk-ant-[A-Za-z0-9_\-]{20,}")),
-    ("OpenAI API key", re.compile(r"sk-(?:proj-|svcacct-)?(?!ant-)[A-Za-z0-9_\-]{32,}")),
+    ("OpenAI API key", re.compile(r"\bsk-(?:proj-|svcacct-)?(?!ant-)[A-Za-z0-9_\-]{32,200}(?![A-Za-z0-9_\-])")),
     ("AWS access key", re.compile(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b")),
     ("GitHub token", re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{50,})")),
     ("Slack token", re.compile(r"\bxox[abprs]-[A-Za-z0-9-]{10,}")),
     ("Stripe live key", re.compile(r"\b[sr]k_live_[A-Za-z0-9]{20,}")),
     ("Google API key", re.compile(r"\bAIza[0-9A-Za-z_\-]{35}")),
     ("Hugging Face token", re.compile(r"\bhf_[A-Za-z0-9]{30,}")),
-    ("Private key block", re.compile(r"-----BEGIN (?:[A-Z]+ )*PRIVATE KEY-----")),
+    # Header plus real key material, so docs that only mention the header don't count.
+    ("Private key block", re.compile(r"-----BEGIN (?:[A-Z]+ )*PRIVATE KEY-----(?:\s|\\n|\\r)+[A-Za-z0-9+/=]{40,}")),
     ("JSON Web Token", re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}")),
 ]
 
@@ -47,8 +48,11 @@ SECRET_HINTS: dict[str, tuple[str, ...]] = {
 
 PHONE = re.compile(r"(?<![\w.+-])(?:\+1[ .-]?)?\(?[2-9]\d{2}\)?[ .-]\d{3}[ .-]\d{4}(?![\w-])|(?<![\w+])\+[1-9]\d{1,2}[ -]?\d{2,4}[ -]\d{3,4}[ -]\d{3,4}(?![\w-])")
 STREET = re.compile(r"\b\d{1,5} (?:[A-Z][a-z]+ ){1,3}(?:Street|St|Avenue|Ave|Road|Rd|Drive|Dr|Lane|Ln|Boulevard|Blvd|Court|Ct|Crescent|Cres|Way|Place|Pl|Terrace|Circle)\b\.?")
-PLACEHOLDER_WORDS = re.compile(r"example|fake|dummy|placeholder|sample|test|your|xxxx|redacted|changeme|\*\*\*|\.\.\.|<|\{|\$", re.I)
-NOT_A_VALUE = re.compile(r"[$({\[<]|os\.environ|process\.env|getenv|secrets\.|\bnull\b|\bNone\b|\btrue\b|\bfalse\b", re.I)
+PLACEHOLDER_WORDS = re.compile(r"example|fake|dummy|placeholder|sample|test|your|xxxx|redacted|changeme|hunter2|abcd|1234|"
+                               r"supersecret|canary|JBSWY3DPEHPK3PXP|\*\*\*|\.\.\.|<|&lt;|\{|\$", re.I)
+# A value that is itself a name (OTHER_VAR, settings.key, my-app-token) rather than a secret.
+NAME_LIKE = re.compile(r"[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+|[a-z]+(?:[-_.:/][a-z]+)*[-_.:/]?\d{0,2}")
+NOT_A_VALUE = re.compile(r"^[A-Z][A-Z0-9_]*=|[$({\[<]|os\.environ|process\.env|getenv|secrets\.|\bnull\b|\bNone\b|\btrue\b|\bfalse\b", re.I)
 
 
 def looks_placeholder(value: str) -> bool:
@@ -216,8 +220,8 @@ def scan(text: str, where: str, ident: Identity | None = None) -> list[Finding]:
     if "=" in text:
         for m in ENV_ASSIGN.finditer(text):
             val_start = m.start(2)
-            v = m.group(2)
-            if any(s <= val_start < e for s, e in seen_spans) or NOT_A_VALUE.search(v):
+            v = m.group(2).strip(".,;:)]}>|`")
+            if any(s <= val_start < e for s, e in seen_spans) or NOT_A_VALUE.search(v) or NAME_LIKE.fullmatch(v):
                 continue
             out.append(Finding("secret", f".env-style {m.group(1)}", where, mask(v, "secret"), "high", False,
                                looks_placeholder(v), fingerprint(v)))

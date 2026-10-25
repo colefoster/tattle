@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>tattle · see what your coding agent sends</title>
-<meta name="description" content="A local egress-audit proxy for Claude Code, Codex and other coding agents. Logs every outbound request and flags secrets and personal data before you find out the hard way.">
-<meta property="og:title" content="tattle · see what your coding agent sends">
+<title>tattle · see what your coding agent already sent</title>
+<meta name="description" content="Audit your past Claude Code and Codex sessions for leaked API keys, .env values and personal data, then watch the next session through a local proxy.">
+<meta property="og:title" content="tattle · see what your coding agent already sent">
 <meta property="og:description" content="Run your agent through a local proxy. Get a report of every request, with leaked keys, .env values and personal data flagged.">
 <meta property="og:image" content="https://tattle.colefoster.ca/img/og.png">
 <meta property="og:url" content="https://tattle.colefoster.ca/">
@@ -181,7 +181,8 @@ footer a{color:var(--ink-2)}
   <header class="top">
     <a class="mark" href="/"><b>tattle</b><span>egress audit</span></a>
     <nav>
-      <a class="hide-s" href="#report">Report</a>
+      <a class="hide-s" href="#retro">Retro</a>
+      <a class="hide-s" href="#report">Live</a>
       <a class="hide-s" href="#how">How it works</a>
       <a class="gh" href="https://github.com/colefoster/tattle"><svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>GitHub</a>
     </nav>
@@ -189,38 +190,76 @@ footer a{color:var(--ink-2)}
 
   <div class="hero">
     <div>
-      <h1>See what your agent <em>tells</em> the internet.</h1>
-      <p class="lede">tattle is a local proxy for <strong>Claude Code, Codex</strong> and any other coding agent. Run the agent through it and get a report of every outbound request, with <strong>API keys, <code>.env</code> values and your personal details flagged</strong> by where they went.</p>
+      <h1>See what your agent <em>already told</em> the internet.</h1>
+      <p class="lede">tattle reads your past <strong>Claude Code and Codex</strong> sessions and reports every <strong>API key, <code>.env</code> value and personal detail</strong> that went to the model provider, or that a tool sent to someone else. Then it watches the next session live.</p>
       <div class="install">
         <code id="cmd"><i>$ </i>uv tool install git+https://github.com/colefoster/tattle</code>
         <button class="copy" type="button" data-copy="uv tool install git+https://github.com/colefoster/tattle" aria-label="Copy install command">
           <svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5.5" y="5.5" width="8" height="8"/><path d="M10.5 5.5v-3h-8v8h3"/></svg><span class="lbl">Copy</span>
         </button>
       </div>
-      <div class="then">then &nbsp;<code>tattle run -- claude</code>&nbsp; or &nbsp;<code>tattle run -- codex</code></div>
+      <div class="then">then &nbsp;<code>tattle</code>&nbsp; to audit the past, &nbsp;<code>tattle run -- claude</code>&nbsp; to watch the next one</div>
     </div>
 
-    <div class="slip" aria-label="Terminal summary from a real tattle session">
-      <div class="slip-head"><span>Egress manifest</span><span>25 Oct 2026 · 9s</span></div>
-      <div class="cmd"><i>$ </i>tattle run -- claude -p "Read .env and index.js…"</div>
-      <div class="sum"><b>25</b> requests · <b>4</b> hosts · <b>1.3 MB</b> sent · <span class="h">4 high</span> · <span class="m">2 medium</span></div>
+    <div class="slip" aria-label="Terminal summary from tattle retro on fixture data">
+      <div class="slip-head"><span>Retro manifest</span><span>64 sessions · Jul–Oct</span></div>
+      <div class="cmd"><i>$ </i>tattle</div>
+      <div class="sum">sent to the <b>model provider</b> · <span class="h">5 high</span> · <span class="m">4 other</span></div>
       <div class="lines">
-      <div class="ln high"><span class="s">high</span><span class="k">.env-style DATABASE_PASSWORD</span><span class="w">••••…(18 chars) · body → api.anthropic.com</span></div>
-      <div class="ln high"><span class="s">high</span><span class="k">OpenAI API key</span><span class="w">••••…(56 chars) · body → api.anthropic.com</span></div>
-      <div class="ln high"><span class="s">high</span><span class="k">value from your .env</span><span class="w">••••…(31 chars) · body → api.anthropic.com</span></div>
-      <div class="ln high"><span class="s">high</span><span class="k">your email</span><span class="w">•••@•••.com · body → api.anthropic.com</span></div>
-      <div class="ln med"><span class="s">med</span><span class="k">email address</span><span class="w">•••@•••.net · body → api.anthropic.com</span></div>
-      <div class="ln med"><span class="s">med</span><span class="k">home directory path</span><span class="w">/Users/•••/ · body → api.anthropic.com</span></div>
+      <div class="ln high"><span class="s">high</span><span class="k">Stripe live key</span><span class="w">••••…(32 chars) · file read ×8</span></div>
+      <div class="ln high"><span class="s">high</span><span class="k">GitHub token</span><span class="w">••••…(40 chars) · tool call ×9</span></div>
+      <div class="ln med"><span class="s">med</span><span class="k">phone number</span><span class="w">••••••••09 · command output ×5</span></div>
       </div>
-      <div class="stamp" aria-hidden="true">Declared<small>values masked</small></div>
+      <div class="sum" style="margin-top:12px">sent to <b>third parties</b> by tools · <span class="h">2 high</span></div>
+      <div class="lines">
+      <div class="ln high"><span class="s">high</span><span class="k">Slack token</span><span class="w">••••…(45 chars) · curl body → hooks.slack.com</span></div>
+      <div class="ln high"><span class="s">high</span><span class="k">your email</span><span class="w">•••@•••.net · WebFetch query → status.vendor…</span></div>
+      </div>
+      <div class="stamp" aria-hidden="true">Rotate<small>4 live-looking keys</small></div>
     </div>
   </div>
 </div>
 
+<section id="retro">
+  <div class="wrap">
+    <h2>The past is where the leaks are.</h2>
+    <p class="sub">Your agents have already read your <code>.env</code> files, run <code>curl</code> with your tokens and pasted your address into a prompt. Run bare <code>tattle</code> and it streams every transcript on disk, then sorts what it finds into two channels.</p>
+    <div class="cols">
+      <div class="col">
+        <h3>To the model provider</h3>
+        <ul>
+          <li><b class="t">Everything in a transcript</b> <span>was part of a prompt</span></li>
+          <li><b class="t">Your messages</b> <span>pasted keys, phone numbers</span></li>
+          <li><b class="t">Files the agent read</b> <span>.env, configs, exports</span></li>
+          <li><b class="t">Command output</b> <span>printenv, cat, logs</span></li>
+        </ul>
+      </div>
+      <div class="col">
+        <h3>To third parties, by tools</h3>
+        <ul>
+          <li><b class="t">WebFetch and WebSearch</b> <span>URLs and query strings</span></li>
+          <li><b class="t">curl, wget, HTTPie, gh api</b> <span>headers, -u, bodies</span></li>
+          <li><b class="t">git push, ssh, scp, rsync</b> <span>remotes, URL credentials</span></li>
+          <li><b class="t">Web-facing MCP tools</b> <span>fetch, search, browse</span></li>
+        </ul>
+      </div>
+    </div>
+    <figure class="shot" style="margin-top:44px">
+      <img src="img/retro-1240.webp" srcset="img/retro-1240.webp 1240w, img/retro.webp 2480w" sizes="(max-width:1180px) 100vw, 1180px" width="2480" height="2800" alt="tattle retro report on fixture data: a Rotate these box listing four live-looking keys, then findings sent to the model provider and to third parties." loading="lazy">
+      <figcaption><span><b>tattle retro --share</b> on fixture transcripts (invented people, random keys)</span><span>64 sessions · 7 hosts · 7 high</span></figcaption>
+    </figure>
+    <div class="mask">
+      <code>3.7 GB · 87 s</code><p><b>Fast, and flat on memory.</b> On a real Mac, tattle read 1,521 transcript files (1,559 sessions) in 87 seconds with a peak of 128 MB. It streams one line at a time and never loads a whole file.</p>
+      <code>--since 30d</code><p>Scan only recent sessions. Placeholder values such as <code>AKIA…EXAMPLE</code> are kept apart, so the <b>Rotate these</b> list stays short and real.</p>
+      <code>Honest limit</code><p>Retro is <b>reconstructed from transcripts</b>. It cannot see what the agent runtime sent by itself, such as telemetry, update checks and feature flags. The live proxy below catches that.</p>
+    </div>
+  </div>
+</section>
+
 <section id="report">
   <div class="wrap">
-    <h2>One report. Every request, every destination.</h2>
-    <p class="sub">When the agent exits, tattle writes a self-contained HTML report: flags first, then each host with what it was sent, then the full request log you can filter. These are real sessions, unedited apart from <code>--share</code> masking.</p>
+    <h2>Then watch the next session live.</h2>
+    <p class="sub"><code>tattle run -- claude</code> puts a local proxy between the agent and the internet, so it also sees the runtime&rsquo;s own telemetry. When the agent exits, tattle writes a self-contained HTML report: flags first, then each host with what it was sent, then the full request log you can filter. These are real sessions, unedited apart from <code>--share</code> masking.</p>
     <div class="tabs" role="tablist">
       <button role="tab" aria-selected="true" data-shot="env">Planted .env</button>
       <button role="tab" aria-selected="false" data-shot="fetch">"fetch example.com"</button>

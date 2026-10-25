@@ -1,10 +1,15 @@
 # tattle
 
-**See what your coding agent sends to the internet.**
+**See what your coding agent already sent, and what it sends next.**
 
-tattle is a local egress-audit proxy for Claude Code, Codex and other coding agents. Run the agent through it and you get a log of every outbound HTTP(S) request, with host, method, path, headers and body size. It flags anything that looks like a secret (API keys, tokens, `.env` contents) or personal data (your email, name, home path, login or machine name), and says where each one went.
+tattle audits coding agents (Claude Code, Codex) for secrets and personal data leaving your machine:
 
-![tattle report](site/img/report-env.png)
+- **`tattle`** (retro audit): reads your past agent transcripts and reports what already went out. It covers what went to the model provider and what the agent's tools sent to third parties.
+- **`tattle run -- <agent>`** (live proxy): runs an agent through a local proxy and logs every outbound HTTP(S) request, including the runtime's own telemetry.
+
+Both flag API keys, tokens, private keys, `.env` contents, emails, phone numbers, street addresses, home paths, and your name, login or machine name. They show where each one went, with the value masked.
+
+![tattle retro report (fixture data)](site/img/retro.png)
 
 ## Install
 
@@ -14,7 +19,27 @@ uv tool install git+https://github.com/colefoster/tattle
 
 Requires Python 3.12+. `pipx install git+https://github.com/colefoster/tattle` also works.
 
-## Use
+## Retro: what already left
+
+```sh
+tattle                      # scan every past session, print a summary, write ~/.tattle/retro/report.html
+tattle retro --since 30d    # only recent sessions (also 12h, 2w, 2026-10-01)
+tattle retro --open         # open the HTML report
+tattle retro --share        # stricter masking: project names and private hosts hidden too
+```
+
+It reads `~/.claude/projects/**/*.jsonl` (subagents included), `~/.codex/sessions/**`, archived Codex sessions and `~/.codex/history.jsonl`. The report keeps two channels apart:
+
+1. **Sent to the model provider.** Everything in a transcript was part of a prompt: your messages, files the agent read, command output and tool calls. Each finding shows the session, when it was last seen, where it appeared (user message, file read, command output…) and a masked preview.
+2. **Sent to third parties by tools.** Network calls rebuilt from WebFetch and WebSearch, web-ish MCP tools and shell commands: `curl`, `wget`, HTTPie, `gh api`, `git push/clone/fetch`, `ssh`, `scp`, `rsync`. URLs, query strings, headers (User-Agent, Authorization), `-u` credentials, credentials embedded in URLs and request bodies are all scanned. Localhost calls are left out.
+
+Live-looking secrets are listed together under **Rotate these**. Values that look like docs or fixtures (`AKIA…EXAMPLE`, `fake`, low entropy) are kept separate as placeholders.
+
+**Retro is reconstructed from transcripts.** It cannot see traffic the agent runtime sent on its own (telemetry, update checks, feature flags) or anything a command fetched indirectly. The live proxy catches that.
+
+Transcripts are streamed one line at a time, and pasted screenshots are dropped before parsing. On a real Mac with 1,521 transcript files (3.7 GB, 1,559 sessions), a full scan took 87 s with a peak RSS of 128 MB.
+
+## Live: what it sends next
 
 ```sh
 tattle run -- claude -p "fetch example.com"   # run any command through the proxy
@@ -43,7 +68,7 @@ tattle  25 requests · 4 hosts · 1.3 MB sent · 4 high · 2 medium · 2 expecte
 | Category | Detectors |
 | --- | --- |
 | Secrets | Anthropic, OpenAI, AWS, GitHub, Slack, Stripe, Google and Hugging Face keys; private-key blocks; JWTs; `.env`-style `*_KEY=` / `*_TOKEN=` / `*_PASSWORD=` assignments; any value from a `.env*` file in the working directory |
-| Personal | your git email (global and repo), your full name, login name, machine name, home-directory paths, other email addresses, and any string you add to `~/.tattle/watch.txt` |
+| Personal | your git email (global and repo), your full name, login name, machine name, home-directory paths, other email addresses, phone numbers, street addresses, and any string you add to `~/.tattle/watch.txt` |
 
 It scans the path, query string, every header and the decoded body. A credential in an `Authorization`, `x-api-key` or `Cookie` header is marked **expected**: it is how the agent signs in, so it is shown dimmed rather than as a leak. Hosts are grouped as model API, telemetry, packages & code, or web.
 

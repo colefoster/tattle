@@ -272,7 +272,7 @@ RETRO_CSS = r"""
 .channel>h2{font:800 22px/1.2 var(--sans);text-transform:none;letter-spacing:-.01em;margin:0 0 4px;display:block}
 .channel>p{margin:0 0 14px;color:var(--mute);font-size:13.5px;max-width:760px}
 .flag.retro{grid-template-columns:78px 1.1fr .9fr 1.5fr 60px}
-.flag .route small{display:block;font-size:11.5px}
+.flag .route small{display:block;font-size:11.5px;white-space:normal}
 .ph summary{cursor:pointer;font:12px var(--mono);color:var(--mute);padding:12px 0}
 .rotate{margin-top:18px;border:1.5px solid var(--red);padding:14px 18px}
 .rotate h3{margin:0 0 6px;font:700 11px var(--mono);text-transform:uppercase;letter-spacing:.14em;color:var(--red)}
@@ -345,7 +345,11 @@ def render_retro(d: dict, share: bool = False) -> str:
 
     prov = [g for g in groups if g["channel"] == "provider"]
     tools = [g for g in groups if g["channel"] == "tools"]
-    rot = [g for g in groups if g["category"] == "secret" and g["severity"] == "high"]
+    rot, seen_rot = [], set()
+    for g in groups:
+        if g["category"] == "secret" and g["severity"] == "high" and (g["kind"], g["sample"]) not in seen_rot:
+            seen_rot.add((g["kind"], g["sample"]))
+            rot.append(g)
     rotate = ""
     if rot:
         items = "".join(f'<li>{e(g["kind"])} <span style="color:var(--mute)">{e(g["sample"])}</span> · {e(g["sessions"][0] if g["sessions"] else "")}'
@@ -375,9 +379,9 @@ def render_retro(d: dict, share: bool = False) -> str:
 <div class="note"><b>Reconstructed from transcripts.</b> This shows what the agents' conversations contained and what their tools were asked to send.
 It cannot see traffic the agent runtime sent on its own, such as telemetry, update checks and feature flags. For that, run the agent through <code>tattle run</code>.</div>
 
+{rotate}
 <div class="channel"><h2>Sent to the model provider</h2>
 <p>Everything in a transcript went to Anthropic or OpenAI as part of the prompt: your messages, files the agent read, command output.</p>
-{rotate if any(g["channel"] == "provider" for g in rot) else ""}
 <div class="flags">{rows(prov[:300])}</div></div>
 
 <div class="channel"><h2>Sent to third parties by tools</h2>

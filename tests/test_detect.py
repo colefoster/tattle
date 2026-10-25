@@ -21,7 +21,7 @@ def test_key_in_auth_header_is_expected(ident):
 
 
 def test_many_secret_kinds(ident):
-    text = f"{FAKE_GITHUB} {FAKE_AWS} -----BEGIN RSA PRIVATE KEY-----"
+    text = f"{FAKE_GITHUB} {FAKE_AWS} -----BEGIN RSA PRIVATE KEY-----\nMIIEow" + "Qz7Kp2Lm" * 8
     assert {"GitHub token", "AWS access key", "Private key block"} <= kinds(scan(text, "body", ident))
 
 
@@ -86,6 +86,20 @@ def test_host_category():
 
 
 def test_dotenv_in_numbered_file_listing(ident):
-    body = '{"text": "     1\\tAPI_TOKEN=abcd1234efgh5678\\n     2→DB_PASSWORD=zzzzyyyyxxxx"}'
+    body = '{"text": "     1\\tAPI_TOKEN=abcd1234efgh5678\\n     2→DB_PASSWORD=Zq7xR2mPw9Lk"}'
     ks = kinds(scan(body, "body", ident))
     assert {".env-style API_TOKEN", ".env-style DB_PASSWORD"} <= ks
+
+
+def test_env_assignment_of_a_name_is_not_a_secret(ident):
+    body = "SECRET_KEY=OTHER_SECRET_KEY\nSESSION_KEY=app.session-key\nTOKEN_SECRET=os.environ['X']"
+    assert not [f for f in scan(body, "body", ident) if f.category == "secret"]
+
+
+def test_placeholder_marking(ident):
+    fs = scan("AKIAIOSFODNN7EXAMPLE and sk-ant-api03-" + "x" * 40, "body", ident)
+    assert fs and all(f.placeholder for f in fs)
+
+
+def test_private_key_header_alone_is_not_a_key(ident):
+    assert not scan("docs: a file starting with -----BEGIN RSA PRIVATE KEY----- is secret", "body", ident)

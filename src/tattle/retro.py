@@ -21,10 +21,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import parse_qsl, unquote_plus, urlsplit
 
-from tattle.detect import Finding, Identity, host_category, scan, scrub
+from tattle.detect import Finding, Identity, fingerprint, host_category, looks_placeholder, mask, scan, scrub
 
 MAX_TEXT = 2 * 1024 * 1024  # scan at most this much of any single text block
 MAX_GROUPS = 20000  # cap on distinct findings kept, so memory stays flat
+BASE64_BLOB = re.compile(rb'"(?:data:[\w/+.-]+;base64,)?[A-Za-z0-9+/=]{4096,}"')
 
 SEV_RANK = {"high": 0, "medium": 1, "low": 2}
 
@@ -145,7 +146,7 @@ class Results:
 
 # ------------------------------------------------------------------ command parsing (tools channel)
 
-NET_CMD = re.compile(r"(?<![\w./-])(curl|wget|https?|xh|gh\s+api|git\s+(?:push|clone|fetch|pull|ls-remote)|ssh|scp|rsync|sftp|mosh|nc|ncat|aws\s+s3)(?![\w-])")
+NET_CMD = re.compile(r"(?<![\w./-])(curl|wget|https?|xh|gh\s+api|git\s+(?:push|clone|fetch|pull|ls-remote)|ssh|scp|rsync|sftp|mosh|nc|ncat|aws\s+s3)(?![\w:-])")
 URL = re.compile(r"https?://[^\s'\"<>`)\]}\\]+")
 LOCAL_HOST = re.compile(r"^(?:localhost|127\.\d+\.\d+\.\d+|0\.0\.0\.0|::1|\[::1\]|[\w-]+\.local(?:host)?)$", re.I)
 SCP_TARGET = re.compile(r"^(?:[\w.-]+@)?([\w.-]+):")
@@ -335,9 +336,9 @@ class Scanner:
             via = c["via"]
             self.r.call(c["host"], via, session)
             if c.get("basic_auth"):
-                f = Finding("secret", "credential in URL or -u", "auth", "••••…", "high")
-                from tattle.detect import fingerprint, mask
-                f.sample, f.fp = mask(c["basic_auth"].split(":", 1)[-1], "secret"), fingerprint(c["basic_auth"])
+                pw = c["basic_auth"].split(":", 1)[-1]
+                f = Finding("secret", "credential in URL or -u", "auth", mask(pw, "secret"), "high",
+                            placeholder=len(pw) < 6 or looks_placeholder(pw), fp=fingerprint(c["basic_auth"]))
                 self.r.finding("tools", f, f"{via} auth", session, ts, c["host"])
             for where, text in c["parts"]:
                 for f in scan(text[:MAX_TEXT], where, self.ident):
@@ -387,6 +388,17 @@ class Scanner:
             for raw in fh:
                 r.lines += 1
                 r.bytes += len(raw)
+                # Codex writes multi-MB world_state / event lines whose parsed form
+                # balloons to hundreds of MB of dicts. Skip them before parsing.
+                if src.kind == "codex" and not (b'"response_item"' in raw[:200] or b'"session_meta"' in raw[:200]):
+                    continue
+                if src.kind == "claude" and len(raw) > 1_000_000 and not any(
+                        t in raw for t in (b'"type":"user"', b'"type":"assistant"', b'"type":"attachment"')):
+                    continue
+                if len(raw) > 256_000:
+                    # Pasted screenshots are base64 inside the JSON; drop them before
+                    # parsing so a 20 MB line does not become 20 MB of Python strings.
+                    raw = BASE64_BLOB.sub(b'""', raw)
                 try:
                     d = json.loads(raw)
                 except ValueError:
