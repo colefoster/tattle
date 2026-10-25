@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "name": "tattle-page",
+  "target": "ash",
+  "kind": "static",
+  "source": "site",
+  "destination": "/var/www/tattle.colefoster.ca",
+  "health_url": "https://tattle.colefoster.ca/",
+  "access": "public",
+  "release_identity": true
+}
