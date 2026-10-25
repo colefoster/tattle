@@ -11,7 +11,7 @@ Both flag API keys, tokens, private keys, `.env` contents, emails, phone numbers
 
 It was prompted by [a post from @This_Liss](https://x.com/This_Liss/status/2113120507289624714): their Claude Code put personal data in HTTP headers because the sites it curled asked agents to identify their users. `tattle retro` flags that pattern in past sessions, and escalates it when the page the agent just read had asked who its user is. The live proxy catches it as it happens.
 
-![tattle retro report (fixture data)](site/img/retro.png)
+![tattle retro report (fixture data)](https://raw.githubusercontent.com/colefoster/tattle/main/site/img/retro.png)
 
 ## Install
 

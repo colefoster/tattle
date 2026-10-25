@@ -1,5 +1,5 @@
 [project]
-name = "tattle"
+name = "tattle-audit"
 version = "0.1.0"
 description = "See what your coding agent sends to the internet: a local egress-audit proxy that flags secrets and personal data."
 readme = "README.md"
@@ -16,6 +16,9 @@ tattle = "tattle.cli:main"
 [project.urls]
 Homepage = "https://tattle.colefoster.ca"
 Source = "https://github.com/colefoster/tattle"
+
+[tool.uv.build-backend]
+module-name = "tattle"
 
 [build-system]
 requires = ["uv_build>=0.13.5,<0.14.0"]

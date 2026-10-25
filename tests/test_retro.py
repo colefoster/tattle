@@ -90,7 +90,7 @@ def test_discovers_both_agents(home):
 def test_provider_channel(home):
     d = run(home)
     k = {x[0] for x in kinds(d, "provider")}
-    assert {"email address", "phone number", "OpenAI API key", "GitHub token", "home directory path", "Private key block"} <= k
+    assert {"email address", "phone number", "OpenAI API key", "GitHub token", "Private key block"} <= k
     assert ("AWS access key", "") in kinds(d, "provider", placeholder=True)  # the AWS docs key
     env = next(g for g in d["groups"] if g["channel"] == "provider" and g["kind"] == "OpenAI API key")
     assert "file read" in env["places"] and "tool call (exec)" in env["places"]
@@ -171,3 +171,19 @@ def test_no_ask_no_escalation(tmp_path):
     jl(tmp_path / ".claude/projects/p/s1.jsonl", rows)
     d = retro.to_dict(retro.run(IDENT, sources=retro.discover(tmp_path)))
     assert {g["kind"] for g in d["groups"] if g["channel"] == "tools"} == {"your email"}
+
+
+def test_own_identity_to_provider_is_info_not_headline(home):
+    d = run(home)
+    prov = {g["kind"] for g in d["groups"] if g["channel"] == "provider"}
+    assert not prov & {"your email", "your full name", "home directory path"}
+    assert d["identity"]["count"] > 0 and "home directory path" in d["identity"]["kinds"]
+    assert "phone number" in prov and "email address" in prov  # other people keep their severity
+    page = report.render_retro(d)
+    assert "as expected" in page and "as expected" in report.retro_terminal(d, None, False)
+
+
+def test_own_identity_to_third_party_stays_high(home):
+    d = run(home)
+    g = next(g for g in d["groups"] if g["channel"] == "tools" and g["kind"] == "your full name")
+    assert g["severity"] == "high" and g["host"] == "api.collector.example.org"

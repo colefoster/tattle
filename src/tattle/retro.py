@@ -27,7 +27,10 @@ MAX_TEXT = 2 * 1024 * 1024  # scan at most this much of any single text block
 MAX_GROUPS = 20000  # cap on distinct findings kept, so memory stays flat
 BASE64_BLOB = re.compile(rb'"(?:data:[\w/+.-]+;base64,)?[A-Za-z0-9+/=]{4096,}"')
 
-SEV_RANK = {"high": 0, "medium": 1, "low": 2}
+SEV_RANK = {"high": 0, "medium": 1, "low": 2, "info": 3}
+# Your own identity in a prompt is expected: it is in every system prompt and cwd.
+# Toward the provider it is info; toward a third party it stays high.
+OWN_IDENTITY = {"your email", "your full name", "your login name", "your machine name", "home directory path"}
 
 
 # ------------------------------------------------------------------ sources
@@ -119,6 +122,8 @@ class Results:
         self.agents: dict[str, int] = {}
 
     def finding(self, channel: str, f: Finding, where: str, session: str, ts: str, host: str = "") -> None:
+        if channel == "provider" and f.kind in OWN_IDENTITY:
+            f.severity = "info"
         key = (channel, f.category, f.kind, f.fp or f.sample, host)
         g = self.groups.get(key)
         if g is None:
@@ -572,6 +577,17 @@ def parse_since(value: str | None) -> float | None:
     return datetime.fromisoformat(value).replace(tzinfo=timezone.utc).timestamp()
 
 
+def identity_summary(r: Results) -> dict:
+    """Own identity sent to the provider, collapsed: kind -> occurrences, plus session count."""
+    kinds: dict[str, int] = {}
+    sessions: set[str] = set()
+    for g in r.groups.values():
+        if g.channel == "provider" and g.severity == "info":
+            kinds[g.kind] = kinds.get(g.kind, 0) + g.count
+            sessions.update(g.sessions)
+    return {"kinds": kinds, "count": sum(kinds.values()), "sessions": len(sessions)}
+
+
 def to_dict(r: Results) -> dict:
     """JSON-safe summary; only masked samples."""
     def g(x: Group) -> dict:
@@ -582,7 +598,8 @@ def to_dict(r: Results) -> dict:
         "files": r.files, "bytes": r.bytes, "lines": r.lines, "bad_lines": r.bad_lines, "agents": r.agents,
         "first": r.first_ts, "last": r.last_ts, "elapsed": round(getattr(r, "elapsed", 0), 1), "dropped": r.dropped,
         "sessions": len(r.sessions),
-        "groups": sorted((g(x) for x in r.groups.values()),
+        "identity": identity_summary(r),
+        "groups": sorted((g(x) for x in r.groups.values() if x.severity != "info"),
                          key=lambda x: (x["placeholder"], SEV_RANK.get(x["severity"], 3), x["category"] != "secret", -x["count"])),
         "calls": sorted(({"host": c.host, "via": c.via, "count": c.count, "category": c.category, "sessions": len(c.sessions)}
                          for c in r.calls.values()), key=lambda c: -c["count"]),

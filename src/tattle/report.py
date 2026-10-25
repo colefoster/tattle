@@ -279,6 +279,7 @@ RETRO_CSS = r"""
 .rotate li{font:12.5px var(--mono);margin:3px 0}
 .rotate ul{margin:0;padding-left:18px}
 .split{display:grid;grid-template-columns:repeat(4,1fr)}
+.note.info{margin:0 0 14px;max-width:none}
 """
 
 
@@ -382,6 +383,7 @@ It cannot see traffic the agent runtime sent on its own, such as telemetry, upda
 {rotate}
 <div class="channel"><h2>Sent to the model provider</h2>
 <p>Everything in a transcript went to Anthropic or OpenAI as part of the prompt: your messages, files the agent read, command output.</p>
+{identity_line(d)}
 <div class="flags">{rows(prov[:300])}</div></div>
 
 <div class="channel"><h2>Sent to third parties by tools</h2>
@@ -394,6 +396,20 @@ It cannot see traffic the agent runtime sent on its own, such as telemetry, upda
 </div></body></html>"""
 
 
+def identity_text(d: dict) -> str:
+    idn = d.get("identity") or {}
+    if not idn.get("count"):
+        return ""
+    kinds = ", ".join(k.replace("your ", "") for k in idn["kinds"])
+    return (f"Your identity ({kinds}) appears {idn['count']:,} times across {idn['sessions']:,}+ sessions sent to the "
+            f"provider, as expected: it is in every system prompt and working directory.")
+
+
+def identity_line(d: dict) -> str:
+    t = identity_text(d)
+    return f'<div class="note info"><b>Expected.</b> {html.escape(t)}</div>' if t else ""
+
+
 def retro_terminal(d: dict, out: Path | None, color: bool = True) -> str:
     R, Y, D, B, X = ("\033[31m", "\033[33m", "\033[2m", "\033[1m", "\033[0m") if color else ("",) * 5
     groups = [g for g in d["groups"] if not g["placeholder"]]
@@ -403,6 +419,9 @@ def retro_terminal(d: dict, out: Path | None, color: bool = True) -> str:
         gs = [g for g in groups if g["channel"] == ch]
         hi = sum(1 for g in gs if g["severity"] == "high")
         lines.append(f"\n{B}{title}{X}  {R}{hi} high{X} · {Y}{len(gs) - hi} other{X}")
+        if ch == "provider" and identity_text(d):
+            idn = d["identity"]
+            lines.append(f"  {D}info   your identity appears in prompts ×{idn['count']:,}, as expected{X}")
         for g in gs[:8]:
             c = R if g["severity"] == "high" else Y
             dest = f" → {g['host']}" if g["host"] else ""
