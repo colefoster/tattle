@@ -1,0 +1,27 @@
+[project]
+name = "tattle"
+version = "0.1.0"
+description = "See what your coding agent sends to the internet: a local egress-audit proxy that flags secrets and personal data."
+readme = "README.md"
+license = "MIT"
+keywords = ["mitmproxy", "claude-code", "codex", "security", "privacy", "egress", "audit"]
+requires-python = ">=3.12"
+dependencies = [
+    "mitmproxy>=12.3.0",
+]
+
+[project.scripts]
+tattle = "tattle.cli:main"
+
+[project.urls]
+Homepage = "https://tattle.colefoster.ca"
+Source = "https://github.com/colefoster/tattle"
+
+[build-system]
+requires = ["uv_build>=0.13.5,<0.14.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
