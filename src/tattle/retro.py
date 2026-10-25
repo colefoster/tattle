@@ -291,6 +291,11 @@ def _text(x) -> str:
     return ""
 
 
+ASK_IDENTITY = re.compile(
+    r"(?:agents?|bots?|crawlers?|scrapers?|AI|LLMs?|automated (?:clients?|tools?))\W+(?:\w+\W+){0,8}?"
+    r"(?:must|should|are (?:asked|required|expected) to|please)\W+(?:\w+\W+){0,4}?"
+    r"(?:identify|include|send|provide|state|declare)\W+(?:\w+\W+){0,4}?"
+    r"(?:users?|operators?|owners?|principal|on whose behalf|contact|e-?mail|name|who)", re.I)
 READ_TOOLS = {"Read": "file read", "NotebookRead": "file read", "Grep": "search output", "Glob": "search output",
               "Bash": "command output", "WebFetch": "web page content", "WebSearch": "web search results"}
 WEB_MCP = re.compile(r"fetch|search|web|http|browse|navigate|scrape|crawl|request|research", re.I)
@@ -301,6 +306,7 @@ class Scanner:
         self.ident = ident
         self.since = since
         self.r = Results()
+        self.asked: set[str] = set()  # sessions where fetched content asked the agent who its user is
 
     # -- shared
     def provider(self, text: str, where: str, session: str, ts: str) -> None:
@@ -342,7 +348,15 @@ class Scanner:
                 self.r.finding("tools", f, f"{via} auth", session, ts, c["host"])
             for where, text in c["parts"]:
                 for f in scan(text[:MAX_TEXT], where, self.ident):
+                    if session in self.asked and f.category == "personal" and where.startswith(("header", "query")):
+                        f.kind, f.severity = f"{f.kind}, after a page asked who you are", "high"
                     self.r.finding("tools", f, f"{via} {where}", session, ts, c["host"])
+
+    def _note_ask(self, text: str, session: str) -> None:
+        # The pattern behind the viral "agent put my details in a header" post:
+        # a fetched page asks agents to identify their user, the next call obliges.
+        if text and ASK_IDENTITY.search(text[:MAX_TEXT]):
+            self.asked.add(session)
 
     @staticmethod
     def _command_text(inp) -> str:
@@ -478,7 +492,9 @@ class Scanner:
             elif bt == "tool_result":
                 name = tool_names.pop(b.get("tool_use_id", ""), "")
                 where = READ_TOOLS.get(name) or (f"tool output ({name})" if name else "tool output")
-                self.provider(_text(b.get("content")), where, label, ts)
+                text = _text(b.get("content"))
+                self._note_ask(text, label)
+                self.provider(text, where, label, ts)
 
     def _codex(self, d: dict, label: str, tool_names: dict) -> None:
         p = d.get("payload")
@@ -499,7 +515,9 @@ class Scanner:
         elif pt in ("function_call_output", "custom_tool_call_output", "local_shell_call_output"):
             name = tool_names.pop(p.get("call_id", ""), "")
             out = p.get("output")
-            self.provider(_text(out) if not isinstance(out, dict) else _text(out.get("content") or out.get("output") or ""),
+            text = _text(out) if not isinstance(out, dict) else _text(out.get("content") or out.get("output") or "")
+            self._note_ask(text, label)
+            self.provider(text,
                           "command output" if name in ("exec", "shell", "exec_command") else "tool output", label, ts)
         elif pt == "web_search_call":
             q = (p.get("action") or {}).get("query", "")

@@ -63,6 +63,18 @@ h1 em{font-style:normal;color:var(--red)}
 .then code{color:var(--ink)}
 
 .hero>*,.how>*,.ledger>*{min-width:0}
+/* why */
+.why{padding:clamp(48px,7vw,88px) 0}
+.why-grid{display:grid;grid-template-columns:minmax(0,.7fr) minmax(0,1.6fr);gap:20px clamp(32px,5vw,72px);align-items:start}
+.why h2{font-size:clamp(22px,2.4vw,30px);margin:6px 0 0}
+.quote{margin:0;border:1.5px solid var(--ink);background:var(--paper-2);padding:clamp(22px,3vw,34px);position:relative}
+.quote blockquote{margin:0}
+.quote p{margin:0;font:800 clamp(24px,3.2vw,40px)/1.12 var(--display);font-variation-settings:"wdth" 78;letter-spacing:-.01em;text-wrap:balance}
+.quote figcaption{margin-top:18px;padding-top:12px;border-top:1px dashed var(--rule);display:flex;gap:6px 16px;flex-wrap:wrap;font:13px var(--mono);color:var(--mute)}
+.quote figcaption a{color:var(--red);text-decoration:none;font-weight:600}
+.quote figcaption a:hover{text-decoration:underline}
+.why-fix{grid-column:2;margin:0;color:var(--ink-2);max-width:44em}
+@media (max-width:900px){.why-grid{grid-template-columns:1fr}.why-fix{grid-column:1}}
 /* manifest slip */
 .slip{position:relative;background:var(--paper-2);border:1px solid var(--rule);padding:22px 22px 18px;font:13px/1.75 var(--mono);box-shadow:0 30px 60px -30px rgba(0,0,0,.7),0 2px 6px rgba(0,0,0,.3);transform:rotate(.6deg)}
 .slip::before{content:"";position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent 0 27px,rgba(236,230,214,.025) 27px 28px);pointer-events:none}
@@ -219,6 +231,22 @@ footer a{color:var(--ink-2)}
     </div>
   </div>
 </div>
+
+<section class="why" aria-labelledby="why-h">
+  <div class="wrap why-grid">
+    <h2 id="why-h">Why this exists</h2>
+    <figure class="quote">
+      <blockquote cite="https://x.com/This_Liss/status/2113120507289624714">
+        <p>&ldquo;I found my Claude Code exposing personal data in http headers&rdquo;</p>
+      </blockquote>
+      <figcaption>
+        <a href="https://x.com/This_Liss/status/2113120507289624714" rel="noopener">@This_Liss on X</a>
+        <span>22 Oct 2026 · the sites it curled had asked agents to identify their users</span>
+      </figcaption>
+    </figure>
+    <p class="why-fix"><code>tattle retro</code> flags personal data in the User-Agent, headers and query strings of past <code>curl</code> and fetch calls. It escalates the call when a page the agent just read asked who its user is. <code>tattle run</code> catches it as it happens.</p>
+  </div>
+</section>
 
 <section id="retro">
   <div class="wrap">
