@@ -219,6 +219,31 @@ def cmd_report(a: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_retro(a: argparse.Namespace) -> int:
+    from tattle import retro
+
+    since = retro.parse_since(a.since)
+    ident = Identity.discover(None, home() / "watch.txt")
+    srcs = retro.discover(Path(a.root).expanduser() if a.root else None, since)
+    if not srcs:
+        print("tattle retro: no Claude Code or Codex transcripts found (~/.claude/projects, ~/.codex/sessions).", file=sys.stderr)
+        return 1
+    res = retro.run(ident, since, sources=srcs, progress=sys.stderr.isatty())
+    d = retro.to_dict(res)
+    out_dir = home() / "retro"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    name = "report.share.html" if a.share else "report.html"
+    out = out_dir / name
+    out.write_text(report.render_retro(d, a.share))
+    if a.json:
+        print(json.dumps({k: v for k, v in d.items() if k != "session_list"}, indent=2))
+    else:
+        print(report.retro_terminal(d, out, sys.stdout.isatty()))
+    if a.open:
+        webbrowser.open(out.as_uri())
+    return 0
+
+
 def cmd_ls(a: argparse.Namespace) -> int:
     root = home() / "sessions"
     for p in sorted(root.glob("*")) if root.exists() else []:
@@ -251,7 +276,15 @@ def cmd_clean(a: argparse.Namespace) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="tattle", description="See what your coding agent sends to the internet.")
-    sub = p.add_subparsers(dest="cmd", required=True)
+    sub = p.add_subparsers(dest="cmd")
+
+    rr = sub.add_parser("retro", help="audit past Claude Code and Codex sessions (the default)")
+    rr.add_argument("--since", help="only sessions newer than this: 30d, 12h, 2w or 2026-10-01")
+    rr.add_argument("--open", action="store_true", help="open the HTML report")
+    rr.add_argument("--share", action="store_true", help="extra masking for a report you will show others")
+    rr.add_argument("--json", action="store_true", help="print the summary as JSON (masked values only)")
+    rr.add_argument("--root", help=argparse.SUPPRESS)  # alternate home dir, for tests
+    rr.set_defaults(fn=cmd_retro)
 
     r = sub.add_parser("run", help="run a command through the audit proxy")
     r.add_argument("--live", action="store_true", help="print each request as it happens (stderr)")
@@ -282,6 +315,9 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("-y", "--yes", action="store_true")
     c.set_defaults(fn=cmd_clean)
 
+    argv = sys.argv[1:] if argv is None else argv
+    if not argv or argv[0].startswith("--") and argv[0] not in ("-h", "--help"):
+        argv = ["retro", *argv]  # bare `tattle` audits what already happened
     a = p.parse_args(argv)
     if a.cmd == "run" and a.command and a.command[0] == "--":
         a.command = a.command[1:]

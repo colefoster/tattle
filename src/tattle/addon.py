@@ -49,7 +49,7 @@ def build_record(flow: http.HTTPFlow, ident: Identity) -> dict:
         "status": resp.status_code if resp else None,
         "resp_bytes": len(resp.raw_content or b"") if resp else 0,
         "error": str(flow.error) if flow.error else None,
-        "findings": [f.__dict__ for f in findings],
+        "findings": [{k: v for k, v in f.__dict__.items() if k != "fp"} for f in findings],
     }
 
 

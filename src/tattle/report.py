@@ -261,3 +261,157 @@ def render_html(recs: list[dict], meta: dict | None = None, share: bool = False)
 def write_report(jsonl: Path, out: Path, meta: dict | None = None, share: bool = False) -> Path:
     out.write_text(render_html(load(jsonl), meta, share))
     return out
+
+
+# ---------------------------------------------------------------- retro (past sessions)
+
+RETRO_CSS = r"""
+.note{margin:28px 0 0;padding:14px 16px;border:1px solid var(--rule);font-size:13.5px;color:var(--mute);max-width:820px}
+.note b{color:var(--ink)}
+.channel{margin-top:44px}
+.channel>h2{font:800 22px/1.2 var(--sans);text-transform:none;letter-spacing:-.01em;margin:0 0 4px;display:block}
+.channel>p{margin:0 0 14px;color:var(--mute);font-size:13.5px;max-width:760px}
+.flag.retro{grid-template-columns:78px 1.1fr .9fr 1.5fr 60px}
+.flag .route small{display:block;font-size:11.5px}
+.ph summary{cursor:pointer;font:12px var(--mono);color:var(--mute);padding:12px 0}
+.rotate{margin-top:18px;border:1.5px solid var(--red);padding:14px 18px}
+.rotate h3{margin:0 0 6px;font:700 11px var(--mono);text-transform:uppercase;letter-spacing:.14em;color:var(--red)}
+.rotate li{font:12.5px var(--mono);margin:3px 0}
+.rotate ul{margin:0;padding-left:18px}
+.split{display:grid;grid-template-columns:repeat(4,1fr)}
+"""
+
+
+def _share_host(host: str, seen: dict) -> str:
+    if re.fullmatch(r"[\d.:]+", host) or ("." not in host and " " not in host):
+        return seen.setdefault(host, f"private host {len(seen) + 1}")
+    return host
+
+
+def _share_session(label: str, seen: dict) -> str:
+    parts = label.split(" · ")
+    if len(parts) == 3:
+        parts[1] = seen.setdefault(parts[1], f"project {len(seen) + 1}")
+    return " · ".join(parts)
+
+
+def render_retro(d: dict, share: bool = False) -> str:
+    e = html.escape
+    d = copy.deepcopy(d)
+    if share:
+        hosts: dict = {}
+        projs: dict = {}
+        for g in d["groups"]:
+            g["sample"] = re.sub(r"[A-Za-z0-9]•••", "•••", g["sample"])
+            g["sample"] = re.sub(r"^.{4}…", "••••…", g["sample"]) if g["category"] == "secret" else g["sample"]
+            g["host"] = _share_host(g["host"], hosts) if g["host"] else ""
+            g["sessions"] = [_share_session(s, projs) for s in g["sessions"]]
+        for c in d["calls"]:
+            c["host"] = _share_host(c["host"], hosts)
+
+    groups = [g for g in d["groups"] if not g["placeholder"]]
+    ph = [g for g in d["groups"] if g["placeholder"]]
+
+    def sev_count(ch, sev):
+        return sum(1 for g in groups if g["channel"] == ch and g["severity"] == sev)
+
+    def day(ts):
+        return ts[:10] if ts else "—"
+
+    def stat(n, label, cls=""):
+        return f'<div class="stat {cls}"><div class="n">{n}</div><div class="l">{label}</div></div>'
+
+    hi = sev_count("provider", "high") + sev_count("tools", "high")
+    med = sev_count("provider", "medium") + sev_count("tools", "medium")
+    stats = (stat(f'{d["sessions"]:,}', "sessions") + stat(f'{d["bytes"] / 1e9:.1f} GB' if d["bytes"] > 1e9 else human_bytes(d["bytes"]), "transcripts read")
+             + stat(len({c["host"] for c in d["calls"]}), "hosts contacted by tools")
+             + stat(hi, "high flags", "hot" if hi else "") + stat(med, "medium flags", "warm" if med else ""))
+
+    def rows(items):
+        out = []
+        for g in items:
+            sev = "expected" if g["placeholder"] else g["severity"]
+            places = ", ".join(f"{k}" + (f" ×{v}" if v > 1 else "") for k, v in sorted(g["places"].items(), key=lambda kv: -kv[1])[:3])
+            sess = g["sessions"][0] if g["sessions"] else ""
+            more = f' +{len(g["sessions"]) - 1} more' if len(g["sessions"]) > 1 else ""
+            dest = f' → <b>{e(g["host"])}</b>' if g["host"] else ""
+            out.append(
+                f'<div class="flag retro"><div class="sev {sev}">{e("placeholder" if g["placeholder"] else sev)}</div>'
+                f'<div class="kind">{e(g["kind"])}<small>{e(g["category"])}</small></div>'
+                f'<div class="sample" title="{e(g["sample"])}">{e(g["sample"])}</div>'
+                f'<div class="route">{e(places)}{dest}<small>{e(sess)}{e(more)} · last {e(day(g["last"]))}</small></div>'
+                f'<div class="count">×{g["count"]:,}</div></div>')
+        return "".join(out) or '<div class="empty">Nothing flagged.</div>'
+
+    prov = [g for g in groups if g["channel"] == "provider"]
+    tools = [g for g in groups if g["channel"] == "tools"]
+    rot = [g for g in groups if g["category"] == "secret" and g["severity"] == "high"]
+    rotate = ""
+    if rot:
+        items = "".join(f'<li>{e(g["kind"])} <span style="color:var(--mute)">{e(g["sample"])}</span> · {e(g["sessions"][0] if g["sessions"] else "")}'
+                        f'{" · seen in " + str(len(g["sessions"])) + " sessions" if len(g["sessions"]) > 1 else ""}</li>' for g in rot[:40])
+        rotate = f'<div class="rotate"><h3>Rotate these · {len(rot)} live-looking secrets</h3><ul>{items}</ul></div>'
+
+    calls = d["calls"]
+    max_c = max((c["count"] for c in calls), default=1)
+    flagged_hosts = {}
+    for g in tools:
+        flagged_hosts[g["host"]] = flagged_hosts.get(g["host"], 0) + 1
+    call_rows = "".join(
+        f'<tr><td><span class="dot {"high" if flagged_hosts.get(c["host"]) else ""}"></span>{e(c["host"])}</td><td class="cat">{e(c["via"])}</td>'
+        f'<td class="cat">{e(c["category"])}</td><td class="num">{c["count"]:,}</td><td><div class="bar"><i style="width:{100 * c["count"] / max_c:.1f}%"></i></div></td>'
+        f'<td class="num">{c["sessions"]:,}</td><td class="num">{flagged_hosts.get(c["host"], "") or ""}</td></tr>'
+        for c in calls[:60])
+    agents = " · ".join(f"{k} {v:,}" for k, v in d["agents"].items())
+    ph_html = (f'<details class="ph"><summary>{len(ph)} more look like placeholders or test values (EXAMPLE, fake, low entropy). Show them.</summary>'
+               f'<div class="flags">{rows(ph[:200])}</div></details>') if ph else ""
+
+    return f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>tattle retro · {e(day(d["first"]))} to {e(day(d["last"]))}</title>
+<style>{CSS}{RETRO_CSS}</style></head><body><div class="wrap">
+<header><div><div class="brand"><b>tattle</b>retro audit</div><h1>What already left this machine</h1></div>
+<div class="meta">{e(day(d["first"]))} → {e(day(d["last"]))} · {e(agents)} transcripts · scanned in <code>{d["elapsed"]}s</code></div></header>
+<section class="stats">{stats}</section>
+<div class="note"><b>Reconstructed from transcripts.</b> This shows what the agents' conversations contained and what their tools were asked to send.
+It cannot see traffic the agent runtime sent on its own, such as telemetry, update checks and feature flags. For that, run the agent through <code>tattle run</code>.</div>
+
+<div class="channel"><h2>Sent to the model provider</h2>
+<p>Everything in a transcript went to Anthropic or OpenAI as part of the prompt: your messages, files the agent read, command output.</p>
+{rotate if any(g["channel"] == "provider" for g in rot) else ""}
+<div class="flags">{rows(prov[:300])}</div></div>
+
+<div class="channel"><h2>Sent to third parties by tools</h2>
+<p>Network calls the agent's tools made, rebuilt from WebFetch, WebSearch, MCP calls and shell commands (curl, wget, gh api, git push, ssh, scp, rsync).</p>
+<div class="flags">{rows(tools[:300])}</div>
+<h2>Destinations <span>{len(calls)} host and tool pairs</span></h2>
+<table><thead><tr><th>host</th><th>via</th><th>kind</th><th class="num">calls</th><th></th><th class="num">sessions</th><th class="num">flags</th></tr></thead><tbody>{call_rows}</tbody></table></div>
+{ph_html}
+<footer><span>generated by tattle retro · values masked before display{" · share mode" if share else ""}</span><span>{d["files"]:,} files · {d["lines"]:,} lines</span></footer>
+</div></body></html>"""
+
+
+def retro_terminal(d: dict, out: Path | None, color: bool = True) -> str:
+    R, Y, D, B, X = ("\033[31m", "\033[33m", "\033[2m", "\033[1m", "\033[0m") if color else ("",) * 5
+    groups = [g for g in d["groups"] if not g["placeholder"]]
+    lines = [f'{B}tattle retro{X}  {d["sessions"]:,} sessions · {d["first"][:10]} → {d["last"][:10]} · '
+             f'{d["bytes"] / 1e6:,.0f} MB in {d["elapsed"]}s']
+    for ch, title in (("provider", "sent to the model provider"), ("tools", "sent to third parties by tools")):
+        gs = [g for g in groups if g["channel"] == ch]
+        hi = sum(1 for g in gs if g["severity"] == "high")
+        lines.append(f"\n{B}{title}{X}  {R}{hi} high{X} · {Y}{len(gs) - hi} other{X}")
+        for g in gs[:8]:
+            c = R if g["severity"] == "high" else Y
+            dest = f" → {g['host']}" if g["host"] else ""
+            lines.append(f"  {c}{g['severity']:<6}{X} {g['kind']:<26} {g['sample']:<24} {D}×{g['count']}{dest}{X}")
+        if len(gs) > 8:
+            lines.append(f"  {D}… {len(gs) - 8} more in the report{X}")
+    top = ", ".join(f"{c['host']} ({c['count']})" for c in d["calls"][:6])
+    if top:
+        lines.append(f"\n{B}top hosts{X}  {top}")
+    ph = len(d["groups"]) - len(groups)
+    if ph:
+        lines.append(f"{D}{ph} placeholder-looking values not counted above{X}")
+    lines.append(f"{D}reconstructed from transcripts: runtime telemetry is not visible here; use `tattle run` for that{X}")
+    if out:
+        lines.append(f"report: {out}")
+    return "\n".join(lines)
