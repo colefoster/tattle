@@ -1,2 +1,3 @@
 User-agent: *
 Allow: /
+Sitemap: https://tattle.colefoster.ca/sitemap.xml
